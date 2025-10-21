@@ -3,12 +3,11 @@ import Dispatcher from "./Dispatcher";
 import DriverView from './DriverView';
 import DriverStandby from "./DriverStandby";
 import Admin from "./Admin";
+import { socket } from './socket'; // <-- 1. Import the socket
 
 import 'leaflet/dist/leaflet.css'; 
 import './style.css'; 
 
-// --- START: ICON FIX ---
-// This patch is still required to make icons work reliably.
 import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -21,8 +20,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
 });
-// --- END: ICON FIX ---
-
 
 export default function App() {
     const [path, setPath] = useState(window.location.pathname);
@@ -32,6 +29,31 @@ export default function App() {
         window.addEventListener('popstate', onLocationChange);
         return () => window.removeEventListener('popstate', onLocationChange);
     }, []);
+
+    // --- 2. ADD THIS ENTIRE useEffect BLOCK ---
+    // This connects the socket when the app mounts
+    // and disconnects it when it unmounts.
+    useEffect(() => {
+        // Connect to the socket server
+        socket.connect();
+
+        // Optional: Log connection events
+        socket.on('connect', () => {
+            console.log('Socket.IO connected');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Socket.IO disconnected');
+        });
+
+        // Cleanup on component unmount
+        return () => {
+            socket.disconnect();
+            socket.off('connect');
+            socket.off('disconnect');
+        };
+    }, []); // The empty array ensures this runs only once
+
     
     // Admin route
     if (path.startsWith('/admin')) { return <Admin />; }
