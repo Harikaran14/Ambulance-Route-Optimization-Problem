@@ -7,32 +7,39 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from auth import auth_bp, admin_bp 
-from db import hospitals, ambulances, dispatches, seed_data # <-- IMPORT seed_data
+from db import hospitals, ambulances, dispatches, seed_data # <-- Make sure seed_data is imported
 from dotenv import load_dotenv
 import requests
 import time
 
-# --- NEW: Load .env variables ---
+# --- Load .env variables ---
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- NEW: Allow all origins for now ---
-CORS(app, origins=["*"])
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# --- Production-Ready CORS ---
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173") 
+
+CORS(app, origins=[FRONTEND_URL])
+socketio = SocketIO(app, cors_allowed_origins=[FRONTEND_URL], async_mode='eventlet')
+
+# --- NEW: Call seed_data() here ---
+# This ensures the database is seeded when the app starts on Render.
+# The 'gunicorn' check prevents it from running multiple times.
+if os.environ.get("IS_GUNICORN") == "true" or __name__ == "__main__":
+    print("Seeding database...")
+    seed_data()
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
-# --- NEW: Get API key from environment ---
+# --- Get API key from environment ---
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
 
 # ... (All your other Python functions: get_coordinates, get_route_data, etc.) ...
 # ... (All your @app.route functions: /find-best-route, /history, etc.) ...
 # ... (All your @socketio.on functions: join_room, location_update, etc.) ...
-
-# --- (Make sure the full content of your app.py is here) ---
 
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
@@ -237,8 +244,7 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # --- NEW: Run seed_data on startup ---
-    seed_data()
+    # --- This block is now only for local development ---
     print("Starting Flask-SocketIO server with eventlet...")
     # Use 5001 to match your frontend code
     socketio.run(app, port=5001, debug=True)
