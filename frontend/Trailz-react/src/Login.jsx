@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API_BASE } from "./api";
+import { API_URL } from "./api";
 
 export default function Login({ onLogin, onSwitch }) {
   const [email, setEmail] = useState("");
