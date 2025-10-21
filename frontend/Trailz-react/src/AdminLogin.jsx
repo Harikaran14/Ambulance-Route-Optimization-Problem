@@ -8,7 +8,7 @@ export default function AdminLogin({ onLogin }) {
   async function handleAdminLogin(e) {
     e.preventDefault();
     setError("");
-    const res = await fetch(`${API_BASE}/admin/login`, {
+    const res = await fetch(`${API_URL}/admin/login`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ passcode }),
     });
     if (res.ok) { onLogin(); } 
