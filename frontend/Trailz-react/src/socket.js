@@ -1,5 +1,7 @@
 import { io } from 'socket.io-client';
-import { API_BASE } from './api';
+import { SOCKET_URL } from './api'; // <-- IMPORT FROM NEW FILE
 
-// Create a single socket instance for the entire app
-export const socket = io(API_BASE);
+// Use the centralized URL
+export const socket = io(SOCKET_URL, {
+    autoConnect: false
+});

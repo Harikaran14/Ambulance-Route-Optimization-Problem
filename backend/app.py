@@ -2,28 +2,38 @@
 import eventlet
 eventlet.monkey_patch()
 
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from auth import auth_bp, admin_bp 
-from db import hospitals, ambulances, dispatches, seed_data
+from db import hospitals, ambulances, dispatches, seed_data # <-- IMPORT seed_data
+from dotenv import load_dotenv
 import requests
-# Folium is NO LONGER NEEDED for this, but we keep it for generate_map_html if it's used elsewhere.
-# from folium.plugins import BeautifyIcon
-# import folium 
 import time
 
+# --- NEW: Load .env variables ---
+load_dotenv()
+
 app = Flask(__name__)
-CORS(app)
+
+# --- NEW: Allow all origins for now ---
+CORS(app, origins=["*"])
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
-TOMTOM_API_KEY = "ZGGAGRTZ3HIOkNQCa865DP9iUm3BwkcI"
+# --- NEW: Get API key from environment ---
+TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
 
-# ... (Utility functions get_coordinates, get_route_data are unchanged) ...
+# ... (All your other Python functions: get_coordinates, get_route_data, etc.) ...
+# ... (All your @app.route functions: /find-best-route, /history, etc.) ...
+# ... (All your @socketio.on functions: join_room, location_update, etc.) ...
+
+# --- (Make sure the full content of your app.py is here) ---
+
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
     try:
@@ -50,7 +60,6 @@ def get_route_data(coord1, coord2):
         if data.get("routes"):
             route = data["routes"][0]
             summary = route["summary"]
-            # --- KEY CHANGE: Ensure points are [lat, lon] tuples/lists ---
             points = [(p["latitude"], p.get("longitude")) for p in route["legs"][0]["points"]]
             instructions = [ins["message"] for ins in route["guidance"]["instructions"]]
             return summary["lengthInMeters"], summary["travelTimeInSeconds"], points, instructions
@@ -58,15 +67,8 @@ def get_route_data(coord1, coord2):
         print(f"Error fetching route data: {e}")
     return None, None, [], []
 
-# --- This function is NO LONGER USED by our sockets, but we can keep it ---
-def generate_map_html(start_coords, end_coords, route_points, start_popup="Start", end_popup="End"):
-    # This function is now deprecated for live tracking but kept to avoid breaking other parts if any
-    pass
-
-
 @app.route("/find-best-route", methods=["POST"])
 def find_best_route():
-    # ... (This entire function is UNCHANGED) ...
     data = request.json
     dispatcher_email = data.get("email") 
     required_specialty = data.get("specialty")
@@ -131,13 +133,11 @@ def find_best_route():
 
 @app.route("/history/<email>")
 def history(email):
-    # ... (This function is UNCHANGED) ...
     user_dispatches = list(dispatches.find({"email": email}, {"_id": 0}))
     return jsonify(user_dispatches)
 
 @socketio.on('join_room')
 def handle_join_room(data):
-    # --- THIS FUNCTION IS MODIFIED ---
     dispatch_id = data['dispatch_id']
     join_room(dispatch_id)
     print(f"Client {request.sid} joined room for dispatch {dispatch_id}")
@@ -152,7 +152,6 @@ def handle_join_room(data):
             
         dist, time_s, points, instructions = get_route_data(start_location, destination_coords)
         
-        # --- KEY CHANGE: Emit JSON data, not HTML ---
         emit('route_update', {
             'dispatch_id': dispatch_id,
             'driver_location': start_location,
@@ -161,11 +160,10 @@ def handle_join_room(data):
             'route_points': points,
             'instructions': instructions,
             'eta_s': time_s
-        }, room=request.sid) # Send to the client that just joined
+        }, room=request.sid)
 
 @socketio.on('join_driver_standby_room')
 def handle_driver_standby(data):
-    # ... (This function is UNCHANGED) ...
     unit_id = data['unit_id']
     driver_room = f"driver_{unit_id}"
     join_room(driver_room)
@@ -182,7 +180,6 @@ def handle_driver_standby(data):
 
 @socketio.on('location_update')
 def handle_location_update(data):
-    # --- THIS FUNCTION IS MODIFIED ---
     dispatch_id = data['dispatch_id']
     current_location = (data['lat'], data['lon'])
     dispatch = active_dispatches.get(dispatch_id)
@@ -198,7 +195,6 @@ def handle_location_update(data):
 
     dist, time_s, points, instructions = get_route_data(current_location, destination_coords)
     
-    # --- KEY CHANGE: Emit JSON data, not HTML ---
     emit('route_update', {
         'dispatch_id': dispatch_id,
         'driver_location': current_location,
@@ -207,16 +203,14 @@ def handle_location_update(data):
         'route_points': points,
         'instructions': instructions,
         'eta_s': time_s
-    }, room=dispatch_id) # Send to everyone in the room
+    }, room=dispatch_id)
 
 @socketio.on('pickup_patient')
 def handle_pickup(data):
-    # ... (This function is UNCHANGED) ...
     dispatch_id = data['dispatch_id']
     if dispatch_id in active_dispatches:
         dispatch = active_dispatches[dispatch_id]
         dispatch['current_leg'] = 'to_hospital'
-        # Trigger a route update with the new destination
         handle_location_update({
             'dispatch_id': dispatch_id,
             'lat': dispatch['last_location'][0], 'lon': dispatch['last_location'][1]
@@ -224,7 +218,6 @@ def handle_pickup(data):
 
 @socketio.on('mission_complete')
 def handle_mission_complete(data):
-    # ... (This function is UNCHANGED) ...
     dispatch_id = data['dispatch_id']
     dispatch = active_dispatches.get(dispatch_id)
     if not dispatch: return
@@ -242,7 +235,10 @@ def handle_mission_complete(data):
     del active_dispatches[dispatch_id]
     print(f"Dispatch {dispatch_id} completed and saved to history.")
 
+
 if __name__ == "__main__":
+    # --- NEW: Run seed_data on startup ---
     seed_data()
     print("Starting Flask-SocketIO server with eventlet...")
+    # Use 5001 to match your frontend code
     socketio.run(app, port=5001, debug=True)
