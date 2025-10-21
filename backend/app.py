@@ -16,16 +16,15 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# --- Use the simple CORS settings as requested ---
+# --- Using simple CORS as requested ---
 CORS(app, origins=["*"])
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# --- Define Environment Keys and Global Dictionaries ---
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
 
 # ---
-# --- 1. DEFINE THE NEW ADMIN ROUTE *BEFORE* REGISTERING ---
+# --- MODIFIED: The /ambulance/reset route now notifies the dispatcher ---
 # ---
 @admin_bp.route("/ambulance/reset", methods=["POST"])
 def reset_ambulance():
@@ -35,6 +34,17 @@ def reset_ambulance():
         return jsonify({"error": "unit_id is required"}), 400
     
     try:
+        # --- NEW: Check for an active dispatch *before* resetting ---
+        dispatch = active_dispatches.get(unit_id)
+        if dispatch:
+            # Notify the original dispatcher that this was force-cancelled
+            socketio.emit('dispatch_cancelled_by_admin', {
+                "dispatch_id": unit_id,
+                "message": f"Dispatch {unit_id} was forcibly reset by an admin."
+            }, room=unit_id)
+            # Now, delete it from memory
+            del active_dispatches[unit_id]
+
         # Set status back to available in the database
         result = ambulances.update_one(
             {"unit": unit_id}, 
@@ -44,23 +54,19 @@ def reset_ambulance():
         if result.matched_count == 0:
             return jsonify({"error": "Ambulance not found"}), 404
             
-        # Also remove from in-memory active dispatches if it's stuck there
-        if unit_id in active_dispatches:
-            del active_dispatches[unit_id]
-            
         return jsonify({"message": f"Ambulance {unit_id} has been reset to available."}), 200
     except Exception as e:
         print(f"Error resetting ambulance: {e}")
         return jsonify({"error": "Could not reset ambulance status."}), 500
-# --- End of new route ---
+# --- End of modification ---
 
 
-# --- 2. NOW, REGISTER THE BLUEPRINTS ---
+# --- Register Blueprints (in correct order) ---
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
 
-# --- DEFINE ALL MAIN APP ROUTES AND SOCKET HANDLERS ---
+# --- All other routes and socket handlers ---
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
     try:
@@ -264,7 +270,6 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # --- 3. The seed_data() call is ONLY here, which is safe ---
     seed_data()
     print("Starting Flask-SocketIO server with eventlet...")
     socketio.run(app, port=5001, debug=True)
