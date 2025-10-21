@@ -15,11 +15,8 @@ export default function AdminDashboard({ onLogout }) {
         try {
             const [statsRes, fleetRes, hospRes, dispRes] = await Promise.all([
                 fetch(`${API_URL}/admin/stats`),
-                // --- FIX 1: Was API_BASE ---
                 fetch(`${API_URL}/admin/fleet-status`), 
-                // --- FIX 2: Was API_BASE ---
                 fetch(`${API_URL}/admin/hospital-status`),
-                // --- FIX 3: Was API_BASE ---
                 fetch(`${API_URL}/admin/all-dispatches`)
             ]);
             if (!statsRes.ok || !fleetRes.ok || !hospRes.ok || !dispRes.ok) {
@@ -45,11 +42,10 @@ export default function AdminDashboard({ onLogout }) {
             return;
         }
         try {
-            // --- FIX 4: Was API_BASE ---
             const res = await fetch(`${API_URL}/admin/hospitals/reset`, { method: "POST" });
             if (res.ok) {
                 alert("Hospital availability has been reset.");
-                fetchData();
+                fetchData(); // Refreshes the data
             } else {
                 throw new Error("Failed to reset hospital availability.");
             }
@@ -70,7 +66,8 @@ export default function AdminDashboard({ onLogout }) {
             {stats && <StatsCards stats={stats} />}
             
             <div className="status-tables">
-                <FleetStatusTable fleet={fleet} />
+                {/* --- MODIFIED: Pass onRefresh prop --- */}
+                <FleetStatusTable fleet={fleet} onRefresh={fetchData} />
                 <HospitalStatusTable hospitals={hospitals} onReset={handleResetBeds} />
             </div>
 
@@ -89,24 +86,68 @@ const StatsCards = ({ stats }) => (
     </div>
 );
 
-const FleetStatusTable = ({ fleet }) => (
-    <div className="status-widget">
-        <h3>Fleet Status</h3>
-        <table>
-            <thead><tr><th>Unit</th><th>Location (Lat, Lon)</th><th>Status</th></tr></thead>
-            <tbody>
-                {fleet.map(amb => (
-                    <tr key={amb.unit}>
-                        <td>{amb.unit}</td>
-                        {/* --- FIX 5: Display lat/lon, not amb.location --- */}
-                        <td>{amb.lat.toFixed(4)}, {amb.lon.toFixed(4)}</td>
-                        <td><span className={`status-pill ${amb.status}`}>{amb.status}</span></td>
+// --- MODIFIED: FleetStatusTable component ---
+const FleetStatusTable = ({ fleet, onRefresh }) => {
+
+    const handleResetAmbulance = async (unitId) => {
+        if (!window.confirm(`Are you sure you want to reset ambulance ${unitId} to "available"? This should only be used in case of an error.`)) {
+            return;
+        }
+        try {
+            const res = await fetch(`${API_URL}/admin/ambulance/reset`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ unit_id: unitId })
+            });
+
+            if (res.ok) {
+                alert(`Ambulance ${unitId} has been reset.`);
+                onRefresh(); // Call the passed-in refresh function
+            } else {
+                const data = await res.json();
+                throw new Error(data.error || "Failed to reset ambulance.");
+            }
+        } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    return (
+        <div className="status-widget">
+            <h3>Fleet Status</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Unit</th>
+                        <th>Location (Lat, Lon)</th>
+                        <th>Status</th>
+                        <th>Actions</th> {/* <-- NEW COLUMN */}
                     </tr>
-                ))}
-            </tbody>
-        </table>
-    </div>
-);
+                </thead>
+                <tbody>
+                    {fleet.map(amb => (
+                        <tr key={amb.unit}>
+                            <td>{amb.unit}</td>
+                            <td>{amb.lat.toFixed(4)}, {amb.lon.toFixed(4)}</td>
+                            <td><span className={`status-pill ${amb.status}`}>{amb.status}</span></td>
+                            {/* --- NEW COLUMN DATA --- */}
+                            <td>
+                                {amb.status !== 'available' && (
+                                    <button 
+                                        onClick={() => handleResetAmbulance(amb.unit)} 
+                                        className="util-button reset-button"
+                                    >
+                                        Reset
+                                    </button>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+};
 
 const HospitalStatusTable = ({ hospitals, onReset }) => (
     <div className="status-widget">
