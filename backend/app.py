@@ -12,27 +12,51 @@ from dotenv import load_dotenv
 import requests
 import time
 
-# --- NEW: Load .env variables ---
+# --- Load .env variables ---
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- NEW: Allow all origins for now ---
-CORS(app, origins=["*"])
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# --- FIX 1: Use FRONTEND_URL environment variable for security ---
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173") 
+CORS(app, origins=[FRONTEND_URL])
+socketio = SocketIO(app, cors_allowed_origins=[FRONTEND_URL], async_mode='eventlet')
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
-# --- NEW: Get API key from environment ---
+# --- FIX 2: Add the new admin route to reset ambulances ---
+@admin_bp.route("/ambulance/reset", methods=["POST"])
+def reset_ambulance():
+    data = request.json
+    unit_id = data.get("unit_id")
+    if not unit_id:
+        return jsonify({"error": "unit_id is required"}), 400
+    
+    try:
+        # Set status back to available in the database
+        result = ambulances.update_one(
+            {"unit": unit_id}, 
+            {"$set": {"status": "available"}}
+        )
+        
+        if result.matched_count == 0:
+            return jsonify({"error": "Ambulance not found"}), 404
+            
+        # Also remove from in-memory active dispatches if it's stuck there
+        if unit_id in active_dispatches:
+            del active_dispatches[unit_id]
+            
+        return jsonify({"message": f"Ambulance {unit_id} has been reset to available."}), 200
+    except Exception as e:
+        print(f"Error resetting ambulance: {e}")
+        return jsonify({"error": "Could not reset ambulance status."}), 500
+# --- End of new feature ---
+
+
+# --- Get API key from environment ---
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
-
-# ... (All your other Python functions: get_coordinates, get_route_data, etc.) ...
-# ... (All your @app.route functions: /find-best-route, /history, etc.) ...
-# ... (All your @socketio.on functions: join_room, location_update, etc.) ...
-
-# --- (Make sure the full content of your app.py is here) ---
 
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
@@ -237,7 +261,8 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # --- NEW: Run seed_data on startup ---
+    # --- This block is for LOCAL development only ---
+    # Gunicorn will NOT run this, so the seed_data() call is safe
     seed_data()
     print("Starting Flask-SocketIO server with eventlet...")
     # Use 5001 to match your frontend code
