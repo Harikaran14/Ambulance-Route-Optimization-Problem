@@ -95,7 +95,6 @@ export default function AmbulanceDispatch({ email }) {
         <div className="form-group">
           <label>Patient Location:</label>
           
-          {/* --- THIS IS THE CORRECTED LINE --- */}
           <input type="text" value={patientLocation} onChange={(e) => { setPatientLocation(e.target.value); setPatientCoords(null); }} disabled={isFormDisabled} />
           
           <button onClick={handleGetLocation} disabled={isFormDisabled} className="util-button">Use Current Location</button>
@@ -116,6 +115,7 @@ export default function AmbulanceDispatch({ email }) {
         <div className="dispatch-map-container">
           <h4>Tracking Dispatch: {activeDispatchId}</h4>
           <div id="dispatcher-map" className="map-container">
+            {/* --- FIX: Removed invalid character after 'LeafletMap' --- */}
             <LeafletMap 
               driverLocation={routeData.driver_location}
               destinationLocation={routeData.destination_location}
