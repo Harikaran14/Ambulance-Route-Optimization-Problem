@@ -1,4 +1,4 @@
-
+# MUST BE AT THE VERY TOP
 import eventlet
 eventlet.monkey_patch()
 
@@ -16,17 +16,16 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# --- Setup CORS and SocketIO ---
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173") 
-CORS(app, origins=[FRONTEND_URL])
-socketio = SocketIO(app, cors_allowed_origins=[FRONTEND_URL], async_mode='eventlet')
+# --- Use the simple CORS settings as requested ---
+CORS(app, origins=["*"])
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # --- Define Environment Keys and Global Dictionaries ---
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
 
 # ---
-# --- FIX: DEFINE ALL BLUEPRINT ROUTES *BEFORE* REGISTERING THEM ---
+# --- 1. DEFINE THE NEW ADMIN ROUTE *BEFORE* REGISTERING ---
 # ---
 @admin_bp.route("/ambulance/reset", methods=["POST"])
 def reset_ambulance():
@@ -53,10 +52,10 @@ def reset_ambulance():
     except Exception as e:
         print(f"Error resetting ambulance: {e}")
         return jsonify({"error": "Could not reset ambulance status."}), 500
-# --- End of blueprint route definitions ---
+# --- End of new route ---
 
 
-# --- NOW, REGISTER THE BLUEPRINTS ---
+# --- 2. NOW, REGISTER THE BLUEPRINTS ---
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
@@ -265,8 +264,7 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # This block is for LOCAL development only
-    # Gunicorn will NOT run this, so the seed_data() call is safe
+    # --- 3. The seed_data() call is ONLY here, which is safe ---
     seed_data()
     print("Starting Flask-SocketIO server with eventlet...")
     socketio.run(app, port=5001, debug=True)
