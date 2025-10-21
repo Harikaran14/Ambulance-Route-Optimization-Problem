@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { API_BASE } from "./api";
+import { API_URL } from "./api";
 
 const Loader = () => <div className="loader">Loading Dashboard...</div>;
 
