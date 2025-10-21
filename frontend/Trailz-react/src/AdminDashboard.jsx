@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { API_URL } from "./api";
+import { API_URL } from "./api"; // You correctly import API_URL here
 
 const Loader = () => <div className="loader">Loading Dashboard...</div>;
 
@@ -14,10 +14,13 @@ export default function AdminDashboard({ onLogout }) {
         setIsLoading(true);
         try {
             const [statsRes, fleetRes, hospRes, dispRes] = await Promise.all([
-                fetch(`${API_BASE}/admin/stats`),
-                fetch(`${API_BASE}/admin/fleet-status`),
-                fetch(`${API_BASE}/admin/hospital-status`),
-                fetch(`${API_BASE}/admin/all-dispatches`)
+                fetch(`${API_URL}/admin/stats`),
+                // --- FIX 1: Was API_BASE ---
+                fetch(`${API_URL}/admin/fleet-status`), 
+                // --- FIX 2: Was API_BASE ---
+                fetch(`${API_URL}/admin/hospital-status`),
+                // --- FIX 3: Was API_BASE ---
+                fetch(`${API_URL}/admin/all-dispatches`)
             ]);
             if (!statsRes.ok || !fleetRes.ok || !hospRes.ok || !dispRes.ok) {
                 throw new Error("One or more network responses were not ok.");
@@ -37,16 +40,15 @@ export default function AdminDashboard({ onLogout }) {
         fetchData();
     }, []);
 
-    // Function to handle the reset button click
     const handleResetBeds = async () => {
         if (!window.confirm("Are you sure you want to reset all hospital bed counts to their default values?")) {
             return;
         }
         try {
-            const res = await fetch(`${API_BASE}/admin/hospitals/reset`, { method: "POST" });
+            // --- FIX 4: Was API_BASE ---
+            const res = await fetch(`${API_URL}/admin/hospitals/reset`, { method: "POST" });
             if (res.ok) {
                 alert("Hospital availability has been reset.");
-                // Re-fetch data to show the updated counts
                 fetchData();
             } else {
                 throw new Error("Failed to reset hospital availability.");
@@ -91,11 +93,13 @@ const FleetStatusTable = ({ fleet }) => (
     <div className="status-widget">
         <h3>Fleet Status</h3>
         <table>
-            <thead><tr><th>Unit</th><th>Location</th><th>Status</th></tr></thead>
+            <thead><tr><th>Unit</th><th>Location (Lat, Lon)</th><th>Status</th></tr></thead>
             <tbody>
                 {fleet.map(amb => (
                     <tr key={amb.unit}>
-                        <td>{amb.unit}</td><td>{amb.location}</td>
+                        <td>{amb.unit}</td>
+                        {/* --- FIX 5: Display lat/lon, not amb.location --- */}
+                        <td>{amb.lat.toFixed(4)}, {amb.lon.toFixed(4)}</td>
                         <td><span className={`status-pill ${amb.status}`}>{amb.status}</span></td>
                     </tr>
                 ))}
