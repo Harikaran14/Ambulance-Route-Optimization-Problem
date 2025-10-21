@@ -1,4 +1,4 @@
-# MUST BE AT THE VERY TOP
+
 import eventlet
 eventlet.monkey_patch()
 
@@ -7,25 +7,27 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from auth import auth_bp, admin_bp 
-from db import hospitals, ambulances, dispatches, seed_data # <-- IMPORT seed_data
+from db import hospitals, ambulances, dispatches, seed_data
 from dotenv import load_dotenv
 import requests
 import time
 
-# --- Load .env variables ---
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- FIX 1: Use FRONTEND_URL environment variable for security ---
+# --- Setup CORS and SocketIO ---
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173") 
 CORS(app, origins=[FRONTEND_URL])
 socketio = SocketIO(app, cors_allowed_origins=[FRONTEND_URL], async_mode='eventlet')
 
-app.register_blueprint(auth_bp, url_prefix='/auth')
-app.register_blueprint(admin_bp, url_prefix='/admin')
+# --- Define Environment Keys and Global Dictionaries ---
+TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
+active_dispatches = {} 
 
-# --- FIX 2: Add the new admin route to reset ambulances ---
+# ---
+# --- FIX: DEFINE ALL BLUEPRINT ROUTES *BEFORE* REGISTERING THEM ---
+# ---
 @admin_bp.route("/ambulance/reset", methods=["POST"])
 def reset_ambulance():
     data = request.json
@@ -51,13 +53,15 @@ def reset_ambulance():
     except Exception as e:
         print(f"Error resetting ambulance: {e}")
         return jsonify({"error": "Could not reset ambulance status."}), 500
-# --- End of new feature ---
+# --- End of blueprint route definitions ---
 
 
-# --- Get API key from environment ---
-TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
-active_dispatches = {} 
+# --- NOW, REGISTER THE BLUEPRINTS ---
+app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(admin_bp, url_prefix='/admin')
 
+
+# --- DEFINE ALL MAIN APP ROUTES AND SOCKET HANDLERS ---
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
     try:
@@ -261,9 +265,8 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # --- This block is for LOCAL development only ---
+    # This block is for LOCAL development only
     # Gunicorn will NOT run this, so the seed_data() call is safe
     seed_data()
     print("Starting Flask-SocketIO server with eventlet...")
-    # Use 5001 to match your frontend code
     socketio.run(app, port=5001, debug=True)
