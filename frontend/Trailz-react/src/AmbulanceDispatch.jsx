@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
-import { API_URL } from "./api"; // Make sure your api.js file is in the same src folder
+import { API_URL } from "./api";
 import { socket } from "./socket";
 import LeafletMap from "./LeafletMap";
+
+// A key for localStorage
+const STORAGE_KEY = 'activeDispatch';
 
 export default function AmbulanceDispatch({ email }) {
   const [patientLocation, setPatientLocation] = useState("Padappai, Chennai");
@@ -14,13 +17,39 @@ export default function AmbulanceDispatch({ email }) {
   const [activeDispatchId, setActiveDispatchId] = useState(null);
   const [routeData, setRouteData] = useState(null);
 
+  // --- NEW: useEffect to load state from localStorage on mount ---
+  useEffect(() => {
+    const savedDispatchJson = localStorage.getItem(STORAGE_KEY);
+    if (savedDispatchJson) {
+      try {
+        const savedDispatch = JSON.parse(savedDispatchJson);
+        // Restore the state from the saved data
+        setActiveDispatchId(savedDispatch.dispatch_id);
+        setPatientLocation(savedDispatch.patientLocation);
+        setSpecialty(savedDispatch.specialty);
+        
+        // IMPORTANT: Re-join the socket room to get live updates
+        // The server will automatically send a 'route_update'
+        // which will restore the routeData and map.
+        socket.emit('join_room', { dispatch_id: savedDispatch.dispatch_id });
+      } catch (e) {
+        console.error("Failed to parse saved dispatch", e);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }, []); // Empty array means this runs only once on mount
+
+  // --- MODIFIED: This useEffect now listens for the new cancel event ---
   useEffect(() => {
     if (!activeDispatchId) return;
+
     function onRouteUpdate(data) {
       if (data.dispatch_id === activeDispatchId) {
         setRouteData(data);
       }
     }
+
+    // This function now clears localStorage
     function onDispatchCompleted(data) {
       if (data.dispatch_id === activeDispatchId) {
         setConfirmation(`Mission ${data.dispatch_id} completed. Ready for new dispatch.`);
@@ -30,15 +59,37 @@ export default function AmbulanceDispatch({ email }) {
         setSpecialty("Trauma");
         setPatientCoords(null);
         setError(null);
+        // Clear the saved state
+        localStorage.removeItem(STORAGE_KEY); 
       }
     }
+
+    // --- NEW: Handler for admin cancellation ---
+    function onDispatchCancelled(data) {
+      if (data.dispatch_id === activeDispatchId) {
+        // Show an error message
+        setError(data.message); 
+        setConfirmation(null);
+        // Reset the state
+        setActiveDispatchId(null);
+        setRouteData(null);
+        // Clear the saved state
+        localStorage.removeItem(STORAGE_KEY); 
+      }
+    }
+
     socket.on('route_update', onRouteUpdate);
     socket.on('dispatch_completed_notification', onDispatchCompleted);
+    // --- NEW: Listen for the cancel event ---
+    socket.on('dispatch_cancelled_by_admin', onDispatchCancelled); 
+
     return () => {
       socket.off('route_update', onRouteUpdate);
       socket.off('dispatch_completed_notification', onDispatchCompleted);
+      // --- NEW: Clean up the cancel listener ---
+      socket.off('dispatch_cancelled_by_admin', onDispatchCancelled);
     };
-  }, [activeDispatchId]);
+  }, [activeDispatchId]); // This logic is still correct
 
   function handleGetLocation() {
     setIsLoading(true);
@@ -76,6 +127,15 @@ export default function AmbulanceDispatch({ email }) {
             setConfirmation(`Dispatch sent successfully to unit ${data.ambulance_unit}. Waiting for map...`);
             setActiveDispatchId(data.dispatch_id);
             socket.emit('join_room', { dispatch_id: data.dispatch_id });
+
+            // --- NEW: Save the active dispatch to localStorage ---
+            const dispatchToSave = {
+              dispatch_id: data.dispatch_id,
+              patientLocation, // Save the form state
+              specialty,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dispatchToSave));
+
         } else {
             setError(data.error || "Failed to compute route");
         }
@@ -94,9 +154,7 @@ export default function AmbulanceDispatch({ email }) {
       <div className="form-section">
         <div className="form-group">
           <label>Patient Location:</label>
-          
           <input type="text" value={patientLocation} onChange={(e) => { setPatientLocation(e.target.value); setPatientCoords(null); }} disabled={isFormDisabled} />
-          
           <button onClick={handleGetLocation} disabled={isFormDisabled} className="util-button">Use Current Location</button>
         </div>
         <div className="form-group">
@@ -109,13 +167,14 @@ export default function AmbulanceDispatch({ email }) {
             {isLoading ? "Calculating..." : (activeDispatchId ? "Tracking Active Dispatch..." : "Find Best Route & Dispatch")}
         </button>
       </div>
+
       {error && <div className="error-message">{error}</div>}
       {confirmation && <div className="confirmation-message">{confirmation}</div>}
+
       {routeData && (
         <div className="dispatch-map-container">
           <h4>Tracking Dispatch: {activeDispatchId}</h4>
           <div id="dispatcher-map" className="map-container">
-            {/* --- FIX: Removed invalid character after 'LeafletMap' --- */}
             <LeafletMap 
               driverLocation={routeData.driver_location}
               destinationLocation={routeData.destination_location}
