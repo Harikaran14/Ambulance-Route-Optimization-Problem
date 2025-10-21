@@ -10,7 +10,7 @@ export default function Signup({ onSwitch }) {
   async function handleSignup(e) {
     e.preventDefault();
     setError("");
-    const res = await fetch(`${API_BASE}/auth/signup`, {
+    const res = await fetch(`${API_URL}/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, name }),
