@@ -8,7 +8,7 @@ export default function History({ email }) {
   useEffect(() => {
     async function fetchHistory() {
       try {
-        const res = await fetch(`${API_BASE}/history/${email}`);
+        const res = await fetch(`${API_URL}/history/${email}`);
         const data = await res.json();
         setHistory(data);
       } catch (error) {
