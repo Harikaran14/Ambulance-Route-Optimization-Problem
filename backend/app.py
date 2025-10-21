@@ -7,32 +7,32 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room
 from auth import auth_bp, admin_bp 
-from db import hospitals, ambulances, dispatches, seed_data # <-- seed_data is imported but NOT called
+from db import hospitals, ambulances, dispatches, seed_data # <-- IMPORT seed_data
 from dotenv import load_dotenv
 import requests
 import time
 
+# --- NEW: Load .env variables ---
 load_dotenv()
 
 app = Flask(__name__)
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173") 
-CORS(app, origins=[FRONTEND_URL])
-socketio = SocketIO(app, cors_allowed_origins=[FRONTEND_URL], async_mode='eventlet')
-
-# --- THIS BLOCK HAS BEEN REMOVED ---
-# The seed_data() call is no longer here.
-# ---
+# --- NEW: Allow all origins for now ---
+CORS(app, origins=["*"])
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
+# --- NEW: Get API key from environment ---
 TOMTOM_API_KEY = os.environ.get("TOMTOM_API_KEY", "YOUR_FALLBACK_KEY")
 active_dispatches = {} 
 
 # ... (All your other Python functions: get_coordinates, get_route_data, etc.) ...
 # ... (All your @app.route functions: /find-best-route, /history, etc.) ...
 # ... (All your @socketio.on functions: join_room, location_update, etc.) ...
+
+# --- (Make sure the full content of your app.py is here) ---
 
 def get_coordinates(place_name):
     url = f"https://api.tomtom.com/search/2/geocode/{place_name}.json?key={TOMTOM_API_KEY}&countrySet=IN"
@@ -237,7 +237,8 @@ def handle_mission_complete(data):
 
 
 if __name__ == "__main__":
-    # The seed_data() call now ONLY runs when you run "python app.py" locally
-    print("Starting Flask-SocketIO server with eventlet...")
+    # --- NEW: Run seed_data on startup ---
     seed_data()
+    print("Starting Flask-SocketIO server with eventlet...")
+    # Use 5001 to match your frontend code
     socketio.run(app, port=5001, debug=True)
