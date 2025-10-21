@@ -10,48 +10,68 @@ export default function AmbulanceDispatch({ email }) {
   const [patientLocation, setPatientLocation] = useState("Padappai, Chennai");
   const [patientCoords, setPatientCoords] = useState(null);
   const [specialty, setSpecialty] = useState("Trauma");
-  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const [activeDispatchId, setActiveDispatchId] = useState(null);
   const [routeData, setRouteData] = useState(null);
 
-  // --- NEW: useEffect to load state from localStorage on mount ---
+  // --- ADD LOG 1 ---
+  console.log('Component Init - activeDispatchId:', activeDispatchId);
+
+  // --- useEffect to load state from localStorage on mount ---
   useEffect(() => {
+    // --- ADD LOG 2 ---
     const savedDispatchJson = localStorage.getItem(STORAGE_KEY);
+    console.log('Effect 1 (Mount) - Checking localStorage:', savedDispatchJson);
+
     if (savedDispatchJson) {
       try {
         const savedDispatch = JSON.parse(savedDispatchJson);
-        // Restore the state from the saved data
+        // --- ADD LOG 3 ---
+        console.log('Effect 1 (Mount) - Found saved dispatch:', savedDispatch);
         setActiveDispatchId(savedDispatch.dispatch_id);
         setPatientLocation(savedDispatch.patientLocation);
         setSpecialty(savedDispatch.specialty);
-        
+
         // IMPORTANT: Re-join the socket room to get live updates
-        // The server will automatically send a 'route_update'
-        // which will restore the routeData and map.
         socket.emit('join_room', { dispatch_id: savedDispatch.dispatch_id });
       } catch (e) {
         console.error("Failed to parse saved dispatch", e);
         localStorage.removeItem(STORAGE_KEY);
       }
+    } else {
+        // --- ADD LOG 4 ---
+        console.log('Effect 1 (Mount) - No saved dispatch found.');
     }
   }, []); // Empty array means this runs only once on mount
 
-  // --- MODIFIED: This useEffect now listens for the new cancel event ---
+  // --- useEffect that depends on activeDispatchId ---
   useEffect(() => {
-    if (!activeDispatchId) return;
+    // --- ADD LOG 5 ---
+    console.log('Effect 2 (activeDispatchId Change) - ID:', activeDispatchId);
+
+    if (!activeDispatchId) {
+        console.log('Effect 2 - Bailing out, no active ID. Listeners not attached.');
+        // Ensure listeners are removed if ID becomes null
+        socket.off('route_update');
+        socket.off('dispatch_completed_notification');
+        socket.off('dispatch_cancelled_by_admin');
+        return; // No need to set up listeners if no dispatch is active
+    }
+    
+    console.log('Effect 2 - Active ID detected, attaching listeners for:', activeDispatchId);
 
     function onRouteUpdate(data) {
       if (data.dispatch_id === activeDispatchId) {
+        console.log('Socket received: route_update for', data.dispatch_id);
         setRouteData(data);
       }
     }
 
-    // This function now clears localStorage
     function onDispatchCompleted(data) {
       if (data.dispatch_id === activeDispatchId) {
+        console.log('Socket received: dispatch_completed_notification for', data.dispatch_id);
         setConfirmation(`Mission ${data.dispatch_id} completed. Ready for new dispatch.`);
         setActiveDispatchId(null);
         setRouteData(null);
@@ -59,37 +79,34 @@ export default function AmbulanceDispatch({ email }) {
         setSpecialty("Trauma");
         setPatientCoords(null);
         setError(null);
-        // Clear the saved state
-        localStorage.removeItem(STORAGE_KEY); 
+        localStorage.removeItem(STORAGE_KEY);
       }
     }
 
-    // --- NEW: Handler for admin cancellation ---
     function onDispatchCancelled(data) {
       if (data.dispatch_id === activeDispatchId) {
-        // Show an error message
-        setError(data.message); 
+        console.log('Socket received: dispatch_cancelled_by_admin for', data.dispatch_id);
+        setError(data.message);
         setConfirmation(null);
-        // Reset the state
         setActiveDispatchId(null);
         setRouteData(null);
-        // Clear the saved state
-        localStorage.removeItem(STORAGE_KEY); 
+        localStorage.removeItem(STORAGE_KEY);
       }
     }
 
+    // Attach listeners
     socket.on('route_update', onRouteUpdate);
     socket.on('dispatch_completed_notification', onDispatchCompleted);
-    // --- NEW: Listen for the cancel event ---
-    socket.on('dispatch_cancelled_by_admin', onDispatchCancelled); 
+    socket.on('dispatch_cancelled_by_admin', onDispatchCancelled);
 
+    // Cleanup function: remove listeners when component unmounts OR activeDispatchId changes
     return () => {
+      console.log('Effect 2 Cleanup - Removing listeners for ID:', activeDispatchId);
       socket.off('route_update', onRouteUpdate);
       socket.off('dispatch_completed_notification', onDispatchCompleted);
-      // --- NEW: Clean up the cancel listener ---
       socket.off('dispatch_cancelled_by_admin', onDispatchCancelled);
     };
-  }, [activeDispatchId]); // This logic is still correct
+  }, [activeDispatchId]);
 
   function handleGetLocation() {
     setIsLoading(true);
@@ -125,28 +142,37 @@ export default function AmbulanceDispatch({ email }) {
         const data = await res.json();
         if (res.ok) {
             setConfirmation(`Dispatch sent successfully to unit ${data.ambulance_unit}. Waiting for map...`);
-            setActiveDispatchId(data.dispatch_id);
+            // This will trigger the second useEffect
+            setActiveDispatchId(data.dispatch_id); 
             socket.emit('join_room', { dispatch_id: data.dispatch_id });
 
-            // --- NEW: Save the active dispatch to localStorage ---
             const dispatchToSave = {
               dispatch_id: data.dispatch_id,
-              patientLocation, // Save the form state
+              patientLocation,
               specialty,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(dispatchToSave));
+            // --- ADD LOG 6 ---
+            console.log('handleDispatch - Dispatch successful, saving:', dispatchToSave);
 
         } else {
             setError(data.error || "Failed to compute route");
+             // --- ADD LOG 6.1 ---
+            console.error('handleDispatch - Dispatch failed:', data.error);
         }
     } catch (err) {
         setError("Network error. Is the backend server running?");
+         // --- ADD LOG 6.2 ---
+        console.error('handleDispatch - Network error:', err);
     } finally {
         setIsLoading(false);
     }
   }
 
-  const isFormDisabled = isLoading || activeDispatchId;
+  const isFormDisabled = isLoading || (activeDispatchId !== null); // More explicit check
+
+  // --- ADD LOG 7 ---
+  console.log('Rendering - activeDispatchId:', activeDispatchId, '| isLoading:', isLoading, '| isFormDisabled:', isFormDisabled);
 
   return (
     <div className="trip-container">
