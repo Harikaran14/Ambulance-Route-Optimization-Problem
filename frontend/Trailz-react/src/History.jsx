@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { API_BASE } from "./api";
+import { API_URL } from "./api";
 
 export default function History({ email }) {
   const [history, setHistory] = useState([]);
