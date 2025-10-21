@@ -9,7 +9,7 @@ export default function Login({ onLogin, onSwitch }) {
   async function handleLogin(e) {
     e.preventDefault();
     setError("");
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
