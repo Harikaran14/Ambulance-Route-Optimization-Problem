@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { API_URL } from "./api"; // <-- IMPORT FROM NEW FILE
+import { API_URL } from "./api"; // Make sure your api.js file is in the same src folder
 import { socket } from "./socket";
 import LeafletMap from "./LeafletMap";
 
@@ -68,7 +68,6 @@ export default function AmbulanceDispatch({ email }) {
     };
 
     try {
-        // --- USE THE API_URL VARIABLE ---
         const res = await fetch(`${API_URL}/find-best-route`, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
         });
@@ -95,7 +94,10 @@ export default function AmbulanceDispatch({ email }) {
       <div className="form-section">
         <div className="form-group">
           <label>Patient Location:</label>
-          <input type"text" value={patientLocation} onChange={(e) => { setPatientLocation(e.target.value); setPatientCoords(null); }} disabled={isFormDisabled} />
+          
+          {/* --- THIS IS THE CORRECTED LINE --- */}
+          <input type="text" value={patientLocation} onChange={(e) => { setPatientLocation(e.target.value); setPatientCoords(null); }} disabled={isFormDisabled} />
+          
           <button onClick={handleGetLocation} disabled={isFormDisabled} className="util-button">Use Current Location</button>
         </div>
         <div className="form-group">
