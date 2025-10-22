@@ -87,6 +87,16 @@ def reset_hospitals():
         hospitals.update_one({"name": "Apollo Hospital, Greams Road"}, {"$set": {"availability": 5}})
         hospitals.update_one({"name": "Fortis Malar Hospital, Adyar"}, {"$set": {"availability": 3}})
         hospitals.update_one({"name": "MIOT International, Manapakkam"}, {"$set": {"availability": 8}})
+        hospitals.update_one({"name": "Kauvery Hospital"}, {"$set": {"availability": 5}})
+        hospitals.update_one({"name": "Vijaya Hospital"}, {"$set": {"availability": 8}})
+        hospitals.update_one({"name": "SIMS Hospital"}, {"$set": {"availability": 6}})
+        hospitals.update_one({"name": "Billroth Hospitals, Shenoy Nagar"}, {"$set": {"availability": 4}})
+        hospitals.update_one({"name": "Dr. Kamakshi Memorial Hospital"}, {"$set": {"availability": 7}})
+        hospitals.update_one({"name": "Dr. Rela Institute, Chromepet"}, {"$set": {"availability": 5}})
+        hospitals.update_one({"name": "Chettinad Hospital, Kelambakkam"}, {"$set": {"availability": 10}})
+        hospitals.update_one({"name": "SRM Medical College Hospital, Potheri"}, {"$set": {"availability": 12}})
+        hospitals.update_one({"name": "Government General Hospital, Park Town"}, {"$set": {"availability": 20}})
+        hospitals.update_one({"name": "Saveetha Medical College Hospital"}, {"$set": {"availability": 9}})
         return jsonify({"message": "Hospital bed availability reset successfully."}), 200
     except Exception as e:
         print(f"Error resetting hospital availability: {e}")
